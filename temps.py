@@ -1,3 +1,4 @@
+import os
 import re
 import time
 import random
@@ -14,6 +15,28 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton
 )
+
+# ОЧИСТКА СТАРЫХ СЕССИЙ ПЕРЕД ЗАПУСКОМ
+def cleanup_sessions():
+    """Удаляет старые session файлы чтобы избежать ошибок базы данных"""
+    files_to_remove = [
+        "pyrogram.session",
+        "pyrogram.session-journal", 
+        "bot_session.session",
+        "bot_session.session-journal",
+        "temps.session",
+        "temps.session-journal"
+    ]
+    for file in files_to_remove:
+        if os.path.exists(file):
+            try:
+                os.remove(file)
+                print(f"Удален старый файл сессии: {file}")
+            except Exception as e:
+                print(f"Ошибка при удалении {file}: {e}")
+
+# Вызываем очистку перед импортом остальных модулей
+cleanup_sessions()
 
 # Убедитесь, что ваш config.py находится в той же папке и содержит эти переменные
 from config import (
@@ -263,7 +286,6 @@ async def generate_mail(client, message):
     domain = get_domain()
     if not domain:
         await message.reply("**Не удалось получить домен, попробуйте снова**")
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(message.chat.id, [loading_msg.id])
         return
 
@@ -271,7 +293,6 @@ async def generate_mail(client, message):
     account = create_account(email, password)
     if not account:
         await message.reply("**Имя пользователя уже занято или произошла ошибка. Выберите другое.**")
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(message.chat.id, [loading_msg.id])
         return
 
@@ -280,7 +301,6 @@ async def generate_mail(client, message):
     token = get_token(email, password)
     if not token:
         await message.reply("**Не удалось получить токен.**")
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(message.chat.id, [loading_msg.id])
         return
 
@@ -307,7 +327,6 @@ async def generate_mail(client, message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton("Проверить письма", callback_data=f"check_{short_id}")]])
 
     await message.reply(output_message, reply_markup=keyboard)
-    # ИСПРАВЛЕНО: используем .id
     await bot.delete_messages(message.chat.id, [loading_msg.id]) 
 
 @bot.on_callback_query(filters.regex(r'^check_'))
@@ -328,7 +347,6 @@ async def check_mail(client, callback_query):
     messages = list_messages(token)
     if not messages:
         await callback_query.answer("Писем не получено ❌", show_alert=True)
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(callback_query.message.chat.id, [loading_msg.id])
         return
 
@@ -353,7 +371,6 @@ async def check_mail(client, callback_query):
         keyboard.append(buttons[i:i+5])
 
     await callback_query.message.reply(output, reply_markup=InlineKeyboardMarkup(keyboard))
-    # ИСПРАВЛЕНО: используем .id
     await bot.delete_messages(callback_query.message.chat.id, [loading_msg.id])
 
 @bot.on_callback_query(filters.regex(r"^close_message"))
@@ -412,18 +429,16 @@ async def manual_check_mail(client, message):
     token = message.text.split(maxsplit=1)[1].strip() if len(message.text.split()) > 1 else ""
     if not token:
         await message.reply("**Пожалуйста, укажите токен после команды /cmail.**")
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(message.chat.id, [loading_msg.id])
         return
 
-    # Запоминаем токен и добавляем в мониторинг
+    # Запоминаем токен и добавляем в мониторинга
     user_tokens[message.from_user.id] = token
     MONITORED_TOKENS[token] = message.from_user.id
     
     messages = list_messages(token)
     if not messages:
         await message.reply("**❌ Писем не найдено или токен неверный.**")
-        # ИСПРАВЛЕНО: используем .id
         await bot.delete_messages(message.chat.id, [loading_msg.id])
         return
         
@@ -448,7 +463,6 @@ async def manual_check_mail(client, message):
         keyboard.append(buttons[i:i+5])
 
     await message.reply(output, reply_markup=InlineKeyboardMarkup(keyboard))
-    # ИСПРАВЛЕНО: используем .id
     await bot.delete_messages(message.chat.id, [loading_msg.id])
 
 @bot.on_message(filters.command('stats'))
@@ -476,17 +490,4 @@ if __name__ == '__main__':
     print("Статистика загружена. Запуск бота...")
     
     # Запускаем бота
-    bot.start()
-    
-    # Создаем асинхронную задачу для мониторинга почты
-    asyncio.get_event_loop().create_task(mail_monitor())
-    
-    # ЭТО БЛОКИРУЕТ ВЫПОЛНЕНИЕ И УДЕРЖИВАЕТ БОТА В РАБОТЕ
-    try:
-        asyncio.get_event_loop().run_forever()
-    except KeyboardInterrupt:
-        # Для корректной остановки
-        pass
-    finally:
-        bot.stop() 
-        print("Бот остановлен.")
+    bot.run()
